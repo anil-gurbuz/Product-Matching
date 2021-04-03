@@ -37,17 +37,20 @@ def matches_to_f1_score(y_true, y_pred, mean=True):
     return f1
 
 
-def create_train_test(label_sample=None):
+def create_train_test(train_label_size=None, valid_label_size=None):
     train = pd.read_csv("data/train.csv")
     train["file_path"] = train.image.map(lambda x: "data/train_images/" + str(x))
     # Create submission format targets
     train["target"] = create_submission_format(train)
 
-    if label_sample:
+    if train_label_size:
         n_labels = train.label_group.nunique()
-        labels_sampled = train.label_group.unique()[np.random.randint(0, n_labels, label_sample)]
-        valid = train.loc[~train.label_group.isin(labels_sampled),].reset_index(drop=True)
-        train = train.loc[train.label_group.isin(labels_sampled),].reset_index(drop=True)
+        train_labels = train.label_group.unique()[np.random.randint(0, n_labels, train_label_size)]
+        valid_labels = train.label_group.unique()[np.random.randint(0, n_labels, valid_label_size)]
+        valid_labels = [label for label in valid_labels if label not in train_labels]
+
+        valid = train.loc[train.label_group.isin(valid_labels),].reset_index(drop=True)
+        train = train.loc[train.label_group.isin(train_labels),].reset_index(drop=True)
 
         # Encode label_group for train only
         enc = LabelEncoder()

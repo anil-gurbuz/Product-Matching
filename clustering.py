@@ -34,4 +34,3 @@ def _search_dist_threshold(dist_matrix, candidates, df ):
 
     return best_threshold, scores
 
-

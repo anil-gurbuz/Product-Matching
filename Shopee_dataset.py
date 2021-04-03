@@ -39,7 +39,7 @@ class ShopeeDataset(Dataset):
             attention_mask = torch.Tensor()
 
         if self.mode == "test":
-            return torch.tensor(image), input_ids, attention_mask
+            return torch.tensor(image), input_ids, attention_mask, torch.Tensor()
         else:
             return torch.tensor(image), input_ids, attention_mask, torch.tensor(row.label_group)
 

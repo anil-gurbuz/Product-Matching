@@ -2,8 +2,10 @@ from lib import *
 from ArcFace import ArcFace
 from Base_Trainer import Base_model
 from Base_Trainer import Tracker
+from clustering import cluster
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 
 # LR = 1e-4
 
@@ -22,10 +24,10 @@ class image_embedder(Base_model):
         self.linear = nn.Linear(1000, embed_size)
         self.arcface_head = ArcFace(embed_size, out_classes)
 
-
-        self.optimizer = None
+        self.f1_monitor_rate = None
+        self.threshold = None
         self.metric_name = "accuracy"
-
+        self.regular_validate = None
 
     def set_loss_func(self):
         self.loss = nn.CrossEntropyLoss()  # Accepts logits with labels
@@ -37,8 +39,7 @@ class image_embedder(Base_model):
         class_pred = torch.argmax(output, dim=1).cpu().detach().numpy()
         label = label.cpu().detach().numpy()
         accuracy = metrics.accuracy_score(label, class_pred)
-        return {self.metric_name : accuracy}
-
+        return {self.metric_name: accuracy}
 
     def forward(self, images, input_ids=None, attention_mask=None, label=None):
         batch_size, _, _, _ = images.shape
@@ -55,25 +56,27 @@ class image_embedder(Base_model):
         else:
             return embedding, 0, {}
 
-
-
     def train_one_batch(self, images, input_ids, attention_mask, y_batch, device):
         self.optimizer.zero_grad()
 
         # Move data to device
-        images, input_ids, attention_mask, y_batch =  images.to(device), input_ids.to(device), attention_mask.to(device), y_batch.to(device)
+        images, input_ids, attention_mask, y_batch = images.to(device), input_ids.to(device), attention_mask.to(
+            device), y_batch.to(device)
 
         # Forwardpass
-        out, loss, metric = self(images,label=y_batch)
+        out, loss, metric = self(images, label=y_batch)
         # Calculate gradients
         loss.backward()
         # Backpropagate the gradients
         self.optimizer.step()
 
+        wandb.log({"epoch": self.current_epoch, "loss": loss.item(), "metric": metric["accuracy"]}, step=self.current_train_step)
+
         return loss, metric
 
         # Method for training one single epoch
-    def train_one_epoch(self, device, trackers):
+
+    def train_one_epoch(self, device):
 
         # Take to training mode
         self.train()
@@ -84,32 +87,19 @@ class image_embedder(Base_model):
         # Initiate tqdm object
         tk0 = tqdm(self.train_loader, total=n_batches)
 
-        # Variables for storing total epoch errors
-        total_loss = 0
-        total_metric = 0
-
         # For each batch ...
         for batch_no, (images, input_id, attention, y_batch) in enumerate(tk0):
             # ... Train model
             loss, metric = self.train_one_batch(images, input_id, attention, y_batch, device)
 
-
-            # ... Cumulative sum up errors
-            total_loss += loss.item()
-            total_metric += metric["accuracy"]
-
             # ... Make tqdm print stats
-            tk0.set_postfix(Stage="train", Batch_No=batch_no, Batch_Loss=loss.item(), Batch_Metric=metric["accuracy"])
+            tk0.set_postfix(Stage="train", Batch_No=self.current_train_step, Batch_Loss=loss.item(), Batch_Metric=metric["accuracy"])
+
+            self.current_train_step +=1
 
         tk0.close()
 
-        # Save loss and metric value for train
-        trackers["loss"].add_to_train_meter(total_loss / n_batches)
-        trackers[self.metric_name].add_to_train_meter(total_metric / n_batches)
-
-        return trackers
-
-    def validate_all(self, device, trackers):
+    def validate_all(self, device):
         # Set model to evalutation mode
         self.eval()
 
@@ -133,18 +123,15 @@ class image_embedder(Base_model):
             total_metric += metric["accuracy"]
 
             # ... Make tqdm print stats
-            tk0.set_postfix(Stage="Validation", Batch_No=batch_no, Batch_Loss=loss.item(), Batch_Metric=metric["accuracy"])
+            tk0.set_postfix(Stage="Validation", Batch_No=batch_no, Batch_Loss=loss.item(),
+                            Batch_Metric=metric["accuracy"])
 
         tk0.close()
-        # Save loss and metric value for validation
-        trackers["loss"].add_to_val_meter(total_loss / n_batches)
-        trackers[self.metric_name].add_to_val_meter(total_metric / n_batches)
-
-        return trackers
 
     def validate_one_batch(self, images, input_ids, attention_mask, y_batch, device):
         # Move validation batch to "device"
-        images, input_ids, attention_mask, y_batch = images.to(device), input_ids.to(device), attention_mask.to(device), y_batch.to(device)
+        images, input_ids, attention_mask, y_batch = images.to(device), input_ids.to(device), attention_mask.to(
+            device), y_batch.to(device)
 
         with torch.no_grad():
             # Forwardpass
@@ -153,59 +140,63 @@ class image_embedder(Base_model):
 
             return loss, metric
 
-
         # Main method for trianing all epochs
+
     def fit(self,
             train_dataset,
             valid_dataset=None,
-            device="cuda",
-            n_epochs=10,
-            train_batch_size=16,
-            valid_batch_size=16,
-            lr = 1e-4
-            ):
+            config={}):
 
         # Set model attributes
         self._set_model_attributes(
             train_dataset=train_dataset,
             valid_dataset=valid_dataset,
-            device=device,
-            n_epochs=n_epochs,
-            train_batch_size=train_batch_size,
-            valid_batch_size=valid_batch_size,
-            lr= lr
-        )
-
-        # Initialise trackers for training and validation tracking
-        trackers = {"loss": Tracker(), self.metric_name: Tracker()}
+            config=config)
 
         wandb.watch(self, self.optimizer, log="all", log_freq=10)
         # For every epoch ...
-        for epoch_no in range(n_epochs):
+        for epoch_no in range(self.n_epochs):
             # ... train the model
-            trackers = self.train_one_epoch(device, trackers)  # Removed self.train_loader
-
-            wandb.log({"epoch":self.current_epoch, "loss":trackers["loss"]}, step=0)
+            self.train_one_epoch(device)  # Removed self.train_loader
 
             # ... Calculate loss and metric on validation
-            if self.valid_loader:
-                trackers = self.validate_all(device, trackers)  # Removed self.valid_loader
+            if (self.valid_loader):
+                if self.regular_validate:
+                    self.validate_all(device)  # Removed self.valid_loader
 
             # ... Move scheduler if applicable
             if self.scheduler:
                 self.scheduler.step()
 
+            if self.current_epoch % self.f1_monitor_rate == 0:
+                train_emb = self.predict(train_dataset, self.device, self.train_batch_size)
+                train_dist_matrix = cdist(train_emb, train_emb, "cosine")
+                best_threshold, _ = cluster(train_dist_matrix, [self.threshold], train_dataset)
+
+                valid_emb = self.predict(valid_dataset, self.device, self.valid_batch_size)
+                valid_dist_matrix = cdist(valid_emb, valid_emb, "cosine")
+                cluster(valid_dist_matrix, [self.threshold], valid_dataset)
+
+                wandb.log({"epoch": self.current_epoch, "train_f1": train_dataset.df.f1.mean(),
+                           "valid_f1": valid_dataset.df.f1.mean()}, step=self.current_train_step)
+
             # Keep record of epoch_no
             self.current_epoch += 1
 
-        return trackers
-
         # Helper function to set model attributes when .fit() is called
-    def _set_model_attributes(self, train_dataset, valid_dataset, device, n_epochs, train_batch_size,
-                                  valid_batch_size, lr):
+
+    def _set_model_attributes(self, train_dataset, valid_dataset, config):
 
         # Set number of epochs
-        self.n_epochs = n_epochs
+        self.n_epochs = config["n_epochs"]
+        self.LR = config["LR"]
+        self.baby_sit = config["baby_sit"]
+        self.train_batch_size = config["train_batch_size"]
+        self.valid_batch_size = config["valid_batch_size"]
+        self.device = config["device"]
+        self.f1_monitor_rate = config["f1_monitor_rate"]
+        self.threshold = config["threshold"]
+        self.regular_validate = config["regular_validate"]
 
         # Move model to "device"
         if next(self.parameters()).device != device:
@@ -215,7 +206,7 @@ class image_embedder(Base_model):
         if self.train_loader is None:
             self.train_loader = DataLoader(
                 train_dataset,
-                batch_size=train_batch_size,
+                batch_size=self.train_batch_size,
                 shuffle=True
             )
             # Set number of training batches
@@ -226,7 +217,7 @@ class image_embedder(Base_model):
             if valid_dataset is not None:
                 self.valid_loader = DataLoader(
                     valid_dataset,
-                    batch_size=valid_batch_size,
+                    batch_size=self.valid_batch_size,
                     shuffle=False
                 )
                 # Set number of validation batches
@@ -238,13 +229,11 @@ class image_embedder(Base_model):
 
         # Initiate Optimizer
         if self.optimizer is None:
-            self.set_optimizer(lr)
+            self.set_optimizer(self.LR)
 
         # Set Learning Rate Scheduler
         if self.scheduler is None:
             self.set_scheduler()  # Requires optimizer already created
-
-
 
     def predict_one_batch(self, images, input_ids, attention_mask, device):
         # Move data to device
@@ -255,14 +244,13 @@ class image_embedder(Base_model):
 
         return embeddings
 
-
-
         # Method for unlabeled data prediction
+
     def predict(self, test_dataset, device, batch_size=16):
 
         # Check if the mode is at "device"
-        if next(self.parameters()).device != device:
-            self.to(device)
+        if next(self.parameters()).device != self.device:
+            self.to(self.device)
 
         # Create data loader
         test_loader = torch.utils.data.DataLoader(
@@ -278,7 +266,7 @@ class image_embedder(Base_model):
         tk0 = tqdm(test_loader, total=len(test_loader))
 
         # For every test batch ...
-        for batch_no, (images, input_ids, attention_mask) in enumerate(tk0):
+        for batch_no, (images, input_ids, attention_mask, _) in enumerate(tk0):
             # Make predictions
             out = self.predict_one_batch(images, input_ids, attention_mask, device)
 

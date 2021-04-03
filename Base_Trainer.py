@@ -10,6 +10,9 @@ class Base_model(nn.Module):
         self.train_n_batches = None
         self.val_n_batches = None
         self.n_epochs = None
+        self.device = None
+        self.LR = None
+        self.baby_sit = None
 
         self.optimizer = None
         self.scheduler = None
