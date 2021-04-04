@@ -128,7 +128,7 @@ class image_embedder(Base_model):
 
         tk0.close()
 
-    def validate_one_batch(self, images, input_ids, attention_mask, y_batch, device):
+    def validate_one_batch2(self, images, input_ids, attention_mask, y_batch, device):
         # Move validation batch to "device"
         images, input_ids, attention_mask, y_batch = images.to(device), input_ids.to(device), attention_mask.to(
             device), y_batch.to(device)
@@ -171,20 +171,24 @@ class image_embedder(Base_model):
             if self.current_epoch % self.f1_monitor_rate == 0:
                 train_emb = self.predict(train_dataset, self.device, self.train_batch_size)
                 train_dist_matrix = cdist(train_emb, train_emb, "cosine")
-                best_threshold, _ = cluster(train_dist_matrix, [self.threshold], train_dataset)
+                train_best_threshold, train_threshold_scores = cluster(train_dist_matrix, [0.3], train_dataset) #np.arange(0.2,0.5,0.05)
 
                 valid_emb = self.predict(valid_dataset, self.device, self.valid_batch_size)
                 valid_dist_matrix = cdist(valid_emb, valid_emb, "cosine")
-                cluster(valid_dist_matrix, [self.threshold], valid_dataset)
-
-                wandb.log({"epoch": self.current_epoch, "train_f1": train_dataset.df.f1.mean(),
-                           "valid_f1": valid_dataset.df.f1.mean()}, step=self.current_train_step)
+                val_best_threshold, val_threshold_scores = cluster(valid_dist_matrix, [0.3], valid_dataset)
+                wandb.log({"epoch": self.current_epoch,
+                           "train_f1": train_dataset.df.f1.mean(),
+                           "valid_f1": valid_dataset.df.f1.mean(),
+                           "val_best_threshold":val_best_threshold,
+                           "train_best_threshold":train_best_threshold,
+                           "val_threshold_scores":wandb.Table(data=[[str(round(val,2)) for val in val_threshold_scores.values()]], columns=[str(round(key,2)).replace(".","_") for key in val_threshold_scores.keys()]),
+                           "train_threshold_scores":wandb.Table(data=[[str(round(val,2)) for val in train_threshold_scores.values()]], columns=[str(round(key,2)).replace(".","_") for key in train_threshold_scores.keys()])},
+                          step=self.current_train_step)
 
             # Keep record of epoch_no
             self.current_epoch += 1
 
         # Helper function to set model attributes when .fit() is called
-
     def _set_model_attributes(self, train_dataset, valid_dataset, config):
 
         # Set number of epochs
