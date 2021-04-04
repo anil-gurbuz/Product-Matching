@@ -168,7 +168,7 @@ class image_embedder(Base_model):
             if self.scheduler:
                 self.scheduler.step()
 
-            if self.current_epoch % self.f1_monitor_rate == 0:
+            if (self.current_epoch+1) % self.f1_monitor_rate == 0:
                 train_emb = self.predict(train_dataset, self.device, self.train_batch_size)
                 train_dist_matrix = cdist(train_emb, train_emb, "cosine")
                 train_best_threshold, train_threshold_scores = cluster(train_dist_matrix, [0.3], train_dataset) #np.arange(0.2,0.5,0.05)

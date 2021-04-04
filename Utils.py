@@ -1,5 +1,5 @@
 from lib import *
-
+from Shopee_dataset import ShopeeDataset, get_transforms
 IMAGE_SIZE = (384, 384)
 data_folder = "data"
 
@@ -37,7 +37,7 @@ def matches_to_f1_score(y_true, y_pred, mean=True):
     return f1
 
 
-def create_train_test(mode=None):
+def create_train_test(mode=None, give_fold=None):
     train = pd.read_csv( data_folder + "/train.csv")
     train["file_path"] = train.image.map(lambda x: data_folder + "/train_images/" + str(x))
     # Create submission format targets
@@ -56,28 +56,45 @@ def create_train_test(mode=None):
         enc = LabelEncoder()
         train.label_group = enc.fit_transform(train.label_group)
 
-        return train, valid
+        train_ds = ShopeeDataset(train, "train", transforms=get_transforms(), tokenizer=None)
+        valid_ds = ShopeeDataset(valid, "test", transforms=get_transforms(), tokenizer=None)
+
+        return train_ds, valid_ds
 
     if mode == "validation":
-        train_labels = train.label_group.unique()[np.random.randint(0, n_labels, n_labels // 3)]
+        cv_splitter = GroupKFold(n_splits=3)
+        train["fold"] = -1
 
-        valid = train.loc[~train.label_group.isin(train_labels),].reset_index(drop=True)
-        train = train.loc[train.label_group.isin(train_labels),].reset_index(drop=True)
+        # Assign folds for validation
+        for fold, (train_idx, valid_idx) in enumerate(cv_splitter.split(train, None, train.label_group)):
+            train.loc[valid_idx, "fold"] = fold
 
-        # Encode label_group for train only
+
+        fold_train = train.loc[train.fold==give_fold,]
+        fold_valid = train.loc[train.fold!=give_fold,]
+
+        # Encode only current fold labels
         enc = LabelEncoder()
-        train.label_group = enc.fit_transform(train.label_group)
+        fold_train.label_group = enc.fit_transform(fold_train.label_group)
 
-        return train, valid
+        train_ds = ShopeeDataset(fold_train, "train", transforms=get_transforms(), tokenizer=None)
+        valid_ds = ShopeeDataset(fold_valid, "test", transforms=get_transforms(), tokenizer=None)
+
+
+        return train_ds, valid_ds
+
 
     if mode == "full_train":
         enc = LabelEncoder()
         train.label_group = enc.fit_transform(train.label_group)
+        train_ds = ShopeeDataset(train, "train", transforms=get_transforms(), tokenizer=None)
 
-        return train, None
+        return train_ds, None
 
     if mode == "inference":
         test = pd.read_csv(data_folder + "/test.csv")
         test["file_path"] = test.image.map(lambda x: data_folder + "/test_images/" + str(x))
 
-        return test, None
+        test_ds = ShopeeDataset(test, "test", transforms=get_transforms(), tokenizer=None)
+
+        return test_ds, None
