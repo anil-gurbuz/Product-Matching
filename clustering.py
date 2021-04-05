@@ -34,3 +34,25 @@ def _search_dist_threshold(dist_matrix, candidates, df ):
 
     return best_threshold, scores
 
+
+def embeddings_to_submission(ds, embeddings, threshold):
+    dist_matrix = cdist(embeddings, embeddings, "cosine")
+
+    selected = dist_matrix < threshold
+    matches = []
+    for row in selected:
+        matches.append(" ".join(ds.df.posting_id[row].tolist()))
+
+    ds.df["matches"] = matches
+
+    ds.df[["posting_id", "matches"]].to_csv("submission.csv", index=False)
+
+
+def iterative_embedding_to_submission(ds, embeddings, threshold):
+    matches = []
+    for idx in tqdm(range(embeddings.shape[0])):
+        selected = cdist(embeddings[idx, np.newaxis], embeddings, "cosine")[0] < threshold
+        matches.append(" ".join(ds.df.posting_id[selected].tolist()))
+
+    ds.df["matches"] = matches
+    ds.df[["posting_id", "matches"]].to_csv("submission.csv", index=False)

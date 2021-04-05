@@ -7,30 +7,36 @@
 
 
 from Utils import *
-from Shopee_dataset import ShopeeDataset, get_transforms
 from Model import image_embedder
-from clustering import cluster
+from clustering import embeddings_to_submission
 
-mode = "validation"  # "tiny_data", "validation", "full_train", "inference"
+mode = "full_train"  # "tiny_data", "validation", "full_train", "inference"
+save = True
+baby_sit = False
+
+os.environ["WANDB_SILENT"] = "false"
+os.environ["WANDB_MODE"] = "dryrun" # "dryrun", "online" #wandb sync DIRECTORY to upload to server
 
 now = datetime.datetime.now()
 run_name = "model@" + now.strftime("%A - %H:%I")
 job_type = "NA"
+#wandb_mode = "online" # "online", "offline", "disabled" "dryrun"
 
-config = {"n_epochs": 1000,
+config = {"n_epochs": 5,
           "LR": 1e-4,
-          "threshold": 0.2,
-          "baby_sit": True,
+          "threshold": 0.3,
           "f1_monitor_rate": 50,
           "train_batch_size": 16,
           "valid_batch_size": 16,
           "device": device,
           "regular_validate": False,
-          "embed_size": 256}
+          "embed_size": 256,
+          "baby_sit":baby_sit
+          }
 wandb.login()
 set_all_seeds()
 
-if config["baby_sit"]:
+if baby_sit:
     config["n_epochs"] = 3
     config["f1_monitor_rate"] = 3
 
@@ -40,27 +46,37 @@ if mode == "validation":
         with wandb.init(project="Shopee", config=config, save_code=True, group=mode, job_type="Fold" + str(fold + 1),
                         name=run_name):
             # ...Create train and validation for the fold
-            train_ds, valid_ds = create_train_test(mode=mode, give_fold=fold)
+            train_ds, valid_ds = create_train_test(mode=mode, fold=fold)
             # ...initiate and train the model
             model = image_embedder(embed_size=config["embed_size"], out_classes=train_ds.df.label_group.nunique())
             model.fit(train_ds, valid_ds, config)
             # ...Save the model
-            torch.save(model.state_dict(), data_folder + "/Embedder_" + mode + "Fold" + str(fold + 1) + ".pth")
+            if save:
+                torch.save(model.state_dict(), data_folder + "/Embedder_" + mode + "Fold" + str(fold + 1) + ".pth")
 
 if mode == "tiny_data" or mode == "full_train":
     with wandb.init(project="Shopee", config=config, save_code=True, group=mode, job_type=job_type, name=run_name):
-        train_ds, valid_ds = create_train_test(mode=mode, give_fold=fold)
+        train_ds, valid_ds = create_train_test(mode=mode)
         model = image_embedder(embed_size=config["embed_size"], out_classes=train_ds.df.label_group.nunique())
         model.fit(train_ds, valid_ds, config)
-        torch.save(model.state_dict(), data_folder + "/Embedder_" + mode + ".pth")
+        if save:
+            torch.save(model.state_dict(), data_folder + "/Embedder_" + mode + str(config["embed_size"])  + ".pth")
 
 if mode == "inference":
     with wandb.init(project="Shopee", config=config, save_code=True, group=mode, job_type=job_type,
                     name=run_name):
-        train_ds, valid_ds = create_train_test(mode=mode, give_fold=fold)
-    pass
+        test_ds, _ = create_train_test(mode=mode)
+        model = image_embedder(embed_size=config["embed_size"], out_classes=train_ds.df.label_group.nunique())
+        model.load_state_dict(torch.load(data_folder + "/Embedder_" + mode + str(config["embed_size"])  + ".pth"))
+        embeddings = model.predict(test_ds, device)
+        embeddings_to_submission(test_ds, embeddings, config["threshold"])
+
+
 
 # ... For each layer
 # Distribution of weights
 # Distribution of activations
 # Distribution of gradients
+
+
+

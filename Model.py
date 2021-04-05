@@ -172,18 +172,23 @@ class image_embedder(Base_model):
                 train_emb = self.predict(train_dataset, self.device, self.train_batch_size)
                 train_dist_matrix = cdist(train_emb, train_emb, "cosine")
                 train_best_threshold, train_threshold_scores = cluster(train_dist_matrix, [0.3], train_dataset) #np.arange(0.2,0.5,0.05)
-
-                valid_emb = self.predict(valid_dataset, self.device, self.valid_batch_size)
-                valid_dist_matrix = cdist(valid_emb, valid_emb, "cosine")
-                val_best_threshold, val_threshold_scores = cluster(valid_dist_matrix, [0.3], valid_dataset)
                 wandb.log({"epoch": self.current_epoch,
                            "train_f1": train_dataset.df.f1.mean(),
-                           "valid_f1": valid_dataset.df.f1.mean(),
-                           "val_best_threshold":val_best_threshold,
-                           "train_best_threshold":train_best_threshold,
-                           "val_threshold_scores":wandb.Table(data=[[str(round(val,2)) for val in val_threshold_scores.values()]], columns=[str(round(key,2)).replace(".","_") for key in val_threshold_scores.keys()]),
-                           "train_threshold_scores":wandb.Table(data=[[str(round(val,2)) for val in train_threshold_scores.values()]], columns=[str(round(key,2)).replace(".","_") for key in train_threshold_scores.keys()])},
-                          step=self.current_train_step)
+                           "train_best_threshold": train_best_threshold,
+                           "train_threshold_scores": wandb.Table(
+                               data=[[str(round(val, 2)) for val in train_threshold_scores.values()]],
+                               columns=[str(round(key, 2)).replace(".", "_") for key in
+                                        train_threshold_scores.keys()])}, step=self.current_train_step)
+
+                if valid_dataset:
+                    valid_emb = self.predict(valid_dataset, self.device, self.valid_batch_size)
+                    valid_dist_matrix = cdist(valid_emb, valid_emb, "cosine")
+                    val_best_threshold, val_threshold_scores = cluster(valid_dist_matrix, [0.3], valid_dataset)
+                    wandb.log({"valid_f1": valid_dataset.df.f1.mean(),
+                               "val_best_threshold": val_best_threshold,
+                               "val_threshold_scores": wandb.Table(data=[[str(round(val, 2)) for val in val_threshold_scores.values()]], columns=[str(round(key, 2)).replace(".", "_") for key in val_threshold_scores.keys()])}, step=self.current_train_step)
+
+
 
             # Keep record of epoch_no
             self.current_epoch += 1
@@ -194,7 +199,6 @@ class image_embedder(Base_model):
         # Set number of epochs
         self.n_epochs = config["n_epochs"]
         self.LR = config["LR"]
-        self.baby_sit = config["baby_sit"]
         self.train_batch_size = config["train_batch_size"]
         self.valid_batch_size = config["valid_batch_size"]
         self.device = config["device"]
