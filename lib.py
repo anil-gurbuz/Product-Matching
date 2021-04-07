@@ -25,6 +25,6 @@ from scipy.spatial.distance import cdist
 
 from efficientnet_pytorch import EfficientNet
 
-from transformers import BertTokenizer, BertModel
+from transformers import BertTokenizer, AutoModel
 
 device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")

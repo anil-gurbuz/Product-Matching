@@ -8,13 +8,13 @@ def get_transforms(img_size=256):
 
 
 class ShopeeDataset(Dataset):
-    def __init__(self, df, mode, transforms=get_transforms(), tokenizer=None):
+    def __init__(self, df, mode, transforms=get_transforms(), tokenizer_dir="data/tokenizer"):
         self.df = df.reset_index(drop=True)
         self.transform = transforms
-
-        ## NOT NEEDED ATM ###
-        self.tokenizer = tokenizer
         self.mode = mode
+
+        # Load tokenizer
+        self.tokenizer = BertTokenizer.from_pretrained(tokenizer_dir)
 
     def __len__(self):
         return self.df.shape[0]
@@ -31,7 +31,7 @@ class ShopeeDataset(Dataset):
         image = image0.transpose(2, 0, 1) # Turn into pytorch format # Batch, Channels, ...
 
         if self.tokenizer:
-            text = self.tokenizer(text, padding="max_length", truncation=True, max_length=16, retun_tensorts="pt")
+            text = self.tokenizer(text, padding="max_length", truncation=True, max_length=16, return_tensors="pt")
             input_ids = text["input_ids"][0]
             attention_mask = text["attention_mask"][0] # MIGHT NEED TO TURN INTO TENSOR
         else:

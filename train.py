@@ -10,9 +10,9 @@ from Utils import *
 from Model import image_embedder
 from clustering import embeddings_to_submission
 
-mode = "full_train"  # "tiny_data", "validation", "full_train", "inference"
+mode = "tiny_data"  # "tiny_data", "validation", "full_train", "inference"
 save = True
-baby_sit = False
+baby_sit = True
 
 os.environ["WANDB_SILENT"] = "false"
 os.environ["WANDB_MODE"] = "dryrun" # "dryrun", "online" #wandb sync DIRECTORY to upload to server
@@ -22,12 +22,12 @@ run_name = "model@" + now.strftime("%A - %H:%I")
 job_type = "NA"
 #wandb_mode = "online" # "online", "offline", "disabled" "dryrun"
 
-config = {"n_epochs": 5,
+config = {"n_epochs": 5, # 30 Epochs are suggested for effnet-b3 in forum
           "LR": 1e-4,
           "threshold": 0.3,
           "f1_monitor_rate": 50,
-          "train_batch_size": 16,
-          "valid_batch_size": 16,
+          "train_batch_size": 8,
+          "valid_batch_size": 8,
           "device": device,
           "regular_validate": False,
           "embed_size": 256,
@@ -52,7 +52,7 @@ if mode == "validation":
             model.fit(train_ds, valid_ds, config)
             # ...Save the model
             if save:
-                torch.save(model.state_dict(), data_folder + "/Embedder_" + mode + "Fold" + str(fold + 1) + ".pth")
+                torch.save(model.state_dict(), data_folder + "/Embedder/" + mode + "Fold" + str(fold + 1) + ".pth")
 
 if mode == "tiny_data" or mode == "full_train":
     with wandb.init(project="Shopee", config=config, save_code=True, group=mode, job_type=job_type, name=run_name):
@@ -60,14 +60,14 @@ if mode == "tiny_data" or mode == "full_train":
         model = image_embedder(embed_size=config["embed_size"], out_classes=train_ds.df.label_group.nunique())
         model.fit(train_ds, valid_ds, config)
         if save:
-            torch.save(model.state_dict(), data_folder + "/Embedder_" + mode + str(config["embed_size"])  + ".pth")
+            torch.save(model.state_dict(), data_folder + "/Embedder/" + mode + str(config["embed_size"])  + ".pth")
 
 if mode == "inference":
     with wandb.init(project="Shopee", config=config, save_code=True, group=mode, job_type=job_type,
                     name=run_name):
         test_ds, _ = create_train_test(mode=mode)
         model = image_embedder(embed_size=config["embed_size"], out_classes=train_ds.df.label_group.nunique())
-        model.load_state_dict(torch.load(data_folder + "/Embedder_" + mode + str(config["embed_size"])  + ".pth"))
+        model.load_state_dict(torch.load(data_folder + "/Embedder/" + mode + str(config["embed_size"])  + ".pth"))
         embeddings = model.predict(test_ds, device)
         embeddings_to_submission(test_ds, embeddings, config["threshold"])
 

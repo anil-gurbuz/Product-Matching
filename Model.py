@@ -11,18 +11,22 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 class image_embedder(Base_model):
-    def __init__(self, embed_size=128, out_classes=11014):
+    def __init__(self, embed_size=128, out_classes=11014, effnet_enc=1000, bert_enc=768):
         super().__init__()
 
         try:
             self.effnet = EfficientNet.from_name("efficientnet-b3")
-            self.effnet.load_state_dict(torch.load("data/efficientnet-b3-5fb5a3c3.pth"))
+            self.effnet.load_state_dict(torch.load("data/image_model/efficientnet-b3-5fb5a3c3.pth"))
         except:
             self.effnet = EfficientNet.from_pretrained(
-                'data\efficientnet-b3-5fb5a3c3.pth')  # Might try without last 2 layers -- basically with extracting the features
+                'data\image_model\efficientnet-b3-5fb5a3c3.pth')  # Might try without last 2 layers -- basically with extracting the features
 
-        self.linear = nn.Linear(1000, embed_size)
-        self.arcface_head = ArcFace(embed_size, out_classes)
+        self.bert = AutoModel.from_pretrained("data/nlp")
+
+        self.linear1 = nn.Linear(effnet_enc, embed_size)
+        self.linear2 = nn.Linear(bert_enc, embed_size)
+
+        self.arcface_head = ArcFace(embed_size*2, out_classes)
 
         self.f1_monitor_rate = None
         self.threshold = None
@@ -45,7 +49,13 @@ class image_embedder(Base_model):
         batch_size, _, _, _ = images.shape
 
         images = self.effnet(images)
-        embedding = self.linear(images)
+        text = self.bert(input_ids=input_ids, attention_mask=attention_mask)
+        # Select first token from the last hidden state. This is the classification token
+        text = text.last_hidden_state[:,0,:]
+
+        image_embedding = self.linear1(images)
+        text_embedding = self.linear2(text)
+        embedding = torch.cat([image_embedding, text_embedding],1)
 
         if label is not None:
             out = self.arcface_head(embedding, label)
@@ -64,7 +74,7 @@ class image_embedder(Base_model):
             device), y_batch.to(device)
 
         # Forwardpass
-        out, loss, metric = self(images, label=y_batch)
+        out, loss, metric = self(images, input_ids, attention_mask, y_batch)
         # Calculate gradients
         loss.backward()
         # Backpropagate the gradients
