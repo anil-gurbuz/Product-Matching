@@ -6,14 +6,22 @@ def get_transforms(img_size=256):
         albumentations.Normalize()
     ])
 
+# Function to get our text title embeddings
+def get_text_embeddings(titles, max_features = 15500):
+
+    vectorizer = TfidfVectorizer(stop_words = 'english', binary = True, max_features = max_features)
+    vectorizer = vectorizer.fit(pd.read_csv(data_folder + "/train.csv"))
+    text_embeddings = vectorizer.transform(titles)
+    del vectorizer
+    return text_embeddings
 
 class ShopeeDataset(Dataset):
-    def __init__(self, df, mode, transforms=get_transforms(), tokenizer=None):
+    def __init__(self, df, mode, transforms=get_transforms()):
         self.df = df.reset_index(drop=True)
         self.transform = transforms
+        self.text_vec = get_text_embeddings(df["title"])
 
-        ## NOT NEEDED ATM ###
-        self.tokenizer = tokenizer
+
         self.mode = mode
 
     def __len__(self):
@@ -22,32 +30,18 @@ class ShopeeDataset(Dataset):
     def __getitem__(self, index):
         row = self.df.iloc[index,]
 
-        text = row.title
+        text_vec = self.text_vec[index,]
+
         image = cv2.imread(row.file_path)
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-
         res0 = self.transform(image=image)
         image0 = res0["image"].astype(np.float32)
         image = image0.transpose(2, 0, 1) # Turn into pytorch format # Batch, Channels, ...
 
-        if self.tokenizer:
-            text = self.tokenizer(text, padding="max_length", truncation=True, max_length=16, retun_tensorts="pt")
-            input_ids = text["input_ids"][0]
-            attention_mask = text["attention_mask"][0] # MIGHT NEED TO TURN INTO TENSOR
-        else:
-            input_ids = torch.Tensor()
-            attention_mask = torch.Tensor()
 
         if self.mode == "test":
-            return torch.tensor(image), input_ids, attention_mask, torch.Tensor()
+            return torch.tensor(image), torch.tensor(np.squeeze(text_vec.toarray().astype(np.float32))), torch.Tensor()
         else:
-            return torch.tensor(image), input_ids, attention_mask, torch.tensor(row.label_group)
-
-
-
-
-
-
-
+            return torch.tensor(image), torch.tensor(np.squeeze(text_vec.toarray().astype(np.float32))), torch.tensor(row.label_group)
 
 

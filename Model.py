@@ -7,22 +7,20 @@ from clustering import cluster
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-# LR = 1e-4
-
-
 class image_embedder(Base_model):
-    def __init__(self, embed_size=128, out_classes=11014):
+    def __init__(self, tfidf_dim, embed_size=1280, out_classes=11014):
         super().__init__()
 
         try:
-            self.effnet = EfficientNet.from_name("efficientnet-b3")
-            self.effnet.load_state_dict(torch.load("data/efficientnet-b3-5fb5a3c3.pth"))
+            self.effnet = EfficientNet.from_name("efficientnet-b1")
+            self.effnet.load_state_dict(torch.load("data/image_model/efficientnet-b1-f1951068.pth"))
         except:
             self.effnet = EfficientNet.from_pretrained(
-                'data\efficientnet-b3-5fb5a3c3.pth')  # Might try without last 2 layers -- basically with extracting the features
+                'data/image_model/efficientnet-b1-f1951068.pth')  # Might try without last 2 layers -- basically with extracting the features
 
-        self.linear = nn.Linear(1000, embed_size)
-        self.arcface_head = ArcFace(embed_size, out_classes)
+        self.linear1 = nn.Linear(1000, embed_size)
+        self.linear2 = nn.Linear(tfidf_dim, embed_size)
+        self.arcface_head = ArcFace(embed_size*2, out_classes)
 
         self.f1_monitor_rate = None
         self.threshold = None
@@ -41,30 +39,33 @@ class image_embedder(Base_model):
         accuracy = metrics.accuracy_score(label, class_pred)
         return {self.metric_name: accuracy}
 
-    def forward(self, images, input_ids=None, attention_mask=None, label=None):
+    def forward(self, images, text_vec, label=None):
         batch_size, _, _, _ = images.shape
 
         images = self.effnet(images)
-        embedding = self.linear(images)
+        img_emb = self.linear1(images)
+        text_emb = self.linear2(text_vec)
+
+
+        full_emb = torch.cat([img_emb,text_emb], dim=1)
 
         if label is not None:
-            out = self.arcface_head(embedding, label)
+            out = self.arcface_head(full_emb, label)
             loss = self.loss(out, label)
             metric = self.monitor_metric(out, label)
 
             return out, loss, metric
         else:
-            return embedding, 0, {}
+            return full_emb, 0, {}
 
-    def train_one_batch(self, images, input_ids, attention_mask, y_batch, device):
+    def train_one_batch(self, images, text_vec, y_batch, device):
         self.optimizer.zero_grad()
 
         # Move data to device
-        images, input_ids, attention_mask, y_batch = images.to(device), input_ids.to(device), attention_mask.to(
-            device), y_batch.to(device)
+        images, text_vec, y_batch = images.to(device), text_vec.to(device), y_batch.to(device)
 
         # Forwardpass
-        out, loss, metric = self(images, label=y_batch)
+        out, loss, metric = self(images, text_vec, label=y_batch)
         # Calculate gradients
         loss.backward()
         # Backpropagate the gradients
@@ -88,9 +89,9 @@ class image_embedder(Base_model):
         tk0 = tqdm(self.train_loader, total=n_batches)
 
         # For each batch ...
-        for batch_no, (images, input_id, attention, y_batch) in enumerate(tk0):
+        for batch_no, (images, text_vec, y_batch) in enumerate(tk0):
             # ... Train model
-            loss, metric = self.train_one_batch(images, input_id, attention, y_batch, device)
+            loss, metric = self.train_one_batch(images, text_vec, y_batch, device)
 
             # ... Make tqdm print stats
             tk0.set_postfix(Stage="train", Batch_No=self.current_train_step, Batch_Loss=loss.item(), Batch_Metric=metric["accuracy"])
@@ -114,9 +115,9 @@ class image_embedder(Base_model):
         total_metric = 0
 
         # For each batch ...
-        for batch_no, (images, input_id, attention, y_batch) in enumerate(tk0):
+        for batch_no, (images, text_vec, y_batch) in enumerate(tk0):
             # ... Calculate metrics on validation set without training
-            loss, metric = self.validate_one_batch(images, input_id, attention, y_batch, device)
+            loss, metric = self.validate_one_batch(images,text_vec, y_batch, device)
 
             # ... Cumulative sum up errors
             total_loss += loss.item()
@@ -128,10 +129,9 @@ class image_embedder(Base_model):
 
         tk0.close()
 
-    def validate_one_batch2(self, images, input_ids, attention_mask, y_batch, device):
+    def validate_one_batch2(self, images, text_vec, y_batch, device):
         # Move validation batch to "device"
-        images, input_ids, attention_mask, y_batch = images.to(device), input_ids.to(device), attention_mask.to(
-            device), y_batch.to(device)
+        images,text_vec, y_batch = images.to(device), text_vec.to(device), y_batch.to(device)
 
         with torch.no_grad():
             # Forwardpass
@@ -243,12 +243,12 @@ class image_embedder(Base_model):
         if self.scheduler is None:
             self.set_scheduler()  # Requires optimizer already created
 
-    def predict_one_batch(self, images, input_ids, attention_mask, device):
+    def predict_one_batch(self, images,text_vec, device):
         # Move data to device
-        images, input_ids, attention_mask = images.to(device), input_ids.to(device), attention_mask.to(device)
+        images, text_vec = images.to(device), text_vec.to(device)
 
         with torch.no_grad():
-            embeddings, _, _ = self(images, input_ids, attention_mask)
+            embeddings, _, _ = self(images, text_vec)
 
         return embeddings
 
@@ -274,9 +274,9 @@ class image_embedder(Base_model):
         tk0 = tqdm(test_loader, total=len(test_loader))
 
         # For every test batch ...
-        for batch_no, (images, input_ids, attention_mask, _) in enumerate(tk0):
+        for batch_no, (images,text_vec, _) in enumerate(tk0):
             # Make predictions
-            out = self.predict_one_batch(images, input_ids, attention_mask, device)
+            out = self.predict_one_batch(images,text_vec, device)
 
             # Move predictions to "cpu" device
             embeddings.append(out.cpu().detach().numpy())

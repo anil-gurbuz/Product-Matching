@@ -25,6 +25,9 @@ from scipy.spatial.distance import cdist
 
 from efficientnet_pytorch import EfficientNet
 
+from sklearn.feature_extraction.text import TfidfVectorizer
 from transformers import BertTokenizer, BertModel
 
 device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+IMAGE_SIZE = (384, 384)
+data_folder = "data"

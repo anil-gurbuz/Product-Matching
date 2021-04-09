@@ -1,7 +1,6 @@
 from lib import *
 from Shopee_dataset import ShopeeDataset, get_transforms
-IMAGE_SIZE = (384, 384)
-data_folder = "data"
+
 
 def set_all_seeds(seed=0):
     random.seed(seed)
@@ -56,8 +55,8 @@ def create_train_test(mode=None, give_fold=None):
         enc = LabelEncoder()
         train.label_group = enc.fit_transform(train.label_group)
 
-        train_ds = ShopeeDataset(train, "train", transforms=get_transforms(), tokenizer=None)
-        valid_ds = ShopeeDataset(valid, "test", transforms=get_transforms(), tokenizer=None)
+        train_ds = ShopeeDataset(train, "train", transforms=get_transforms())
+        valid_ds = ShopeeDataset(valid, "test", transforms=get_transforms())
 
         return train_ds, valid_ds
 
@@ -77,8 +76,8 @@ def create_train_test(mode=None, give_fold=None):
         enc = LabelEncoder()
         fold_train.label_group = enc.fit_transform(fold_train.label_group)
 
-        train_ds = ShopeeDataset(fold_train, "train", transforms=get_transforms(), tokenizer=None)
-        valid_ds = ShopeeDataset(fold_valid, "test", transforms=get_transforms(), tokenizer=None)
+        train_ds = ShopeeDataset(fold_train, "train", transforms=get_transforms())
+        valid_ds = ShopeeDataset(fold_valid, "test", transforms=get_transforms())
 
 
         return train_ds, valid_ds
@@ -87,7 +86,7 @@ def create_train_test(mode=None, give_fold=None):
     if mode == "full_train":
         enc = LabelEncoder()
         train.label_group = enc.fit_transform(train.label_group)
-        train_ds = ShopeeDataset(train, "train", transforms=get_transforms(), tokenizer=None)
+        train_ds = ShopeeDataset(train, "train", transforms=get_transforms())
 
         return train_ds, None
 
@@ -95,6 +94,6 @@ def create_train_test(mode=None, give_fold=None):
         test = pd.read_csv(data_folder + "/test.csv")
         test["file_path"] = test.image.map(lambda x: data_folder + "/test_images/" + str(x))
 
-        test_ds = ShopeeDataset(test, "test", transforms=get_transforms(), tokenizer=None)
+        test_ds = ShopeeDataset(test, "test", transforms=get_transforms())
 
         return test_ds, None
