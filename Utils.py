@@ -97,3 +97,22 @@ def create_train_test(mode=None, give_fold=None):
         test_ds = ShopeeDataset(test, "test", transforms=get_transforms())
 
         return test_ds, None
+
+
+
+#
+# mul = 1000
+#
+# steps = len(embeddings_cat) // mul
+# if(len(embeddings_cat) % mul != 0):
+#     steps += 1
+#
+# for i in tqdm(range(steps)):
+#     a = i*mul
+#     b = (i+1)*mul
+#     b = min(b, len(embeddings_cat))
+#     k = metrics.pairwise_distances(
+#         embeddings_cat[a:b], embeddings_cat, metric='cosine')
+#     k = 1-k
+#     print(k.shape)
+#     rows, cols = np.where(k > 0.9)

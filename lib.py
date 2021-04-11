@@ -2,7 +2,7 @@ import numpy as np # linear algebra
 import pandas as pd # data processing, CSV file I/O (e.g. pd.read_csv)
 import math
 import random
-import sys, gc, os
+import sys, gc, os, logging
 from tqdm import tqdm
 import pickle
 import wandb
@@ -22,6 +22,7 @@ import torch.nn.functional as F
 from torchvision import models as vision_models
 import torch.optim as optim
 from scipy.spatial.distance import cdist
+import cupy as cp
 
 from efficientnet_pytorch import EfficientNet
 
@@ -30,4 +31,5 @@ from transformers import BertTokenizer, BertModel
 
 device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 IMAGE_SIZE = (384, 384)
+TEXT_VEC_SIZE = 15000
 data_folder = "data"

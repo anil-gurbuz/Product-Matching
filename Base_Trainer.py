@@ -1,60 +1,66 @@
 from lib import *
 
-# MIGHT WRITE A SUMMARY ABOUT WHAT EACH FUNCTION DOES. FOR EXAMPLE: TRAIN_ONE_BATCH -MOVES DATA TO DEVICE, FORWARDPASS ...
+# DATASET REQUIREMENTS
+# 1. For training&Validation sets:  return X, y
+# 2. For test sets:  return X
+
+# MODEL CLASS REQUIREMENTS
+# 1. Forward function: return out, loss, metric OR return out, 0, 0
+
 class Base_model(nn.Module):
     def __init__(self, *args, **kwargs):
         super().__init__()
+
         self.train_loader = None
         self.valid_loader = None
 
-        self.train_n_batches = None
-        self.val_n_batches = None
+        # Set via config
+        self.train_batch_size = None
+        self.valid_batch_size = None
         self.n_epochs = None
+        self.validate_every_n_epoch = None
         self.device = None
         self.LR = None
-        self.baby_sit = None
 
+        # Manually initialized -- MUST
+        self.loss = None
+        self.metric = None
         self.optimizer = None
         self.scheduler = None
-        self.loss = None
 
+        # Already initialized
         self.current_epoch = 0
         self.current_train_step = 0
         self.current_valid_step = 0
 
-        self.metric_name = None      # Have to set this
-        # self.metrics["train"] = {}
-        # self.metrics["valid"] = {}
-        # self.metrics["test"] = {}
+
 
     # Modify this as appropriate for the model in use
     def forward(self, *args, **kwargs):
-        return super().forward(*args, **kwargs)
+        # Takes data_batch as parameter -- below parts are based on this as well.
 
-        # Modify this to choose a loss function to use in training
+        # if label:
+        #     return out, loss, metric
+        # else:
+        #     return out, 0, 0
+        pass
 
-    def set_loss_func(self, *args, **kwargs):
-        return
+    def set_optimizer(self):
+        pass
 
-    # Modify this to select from torch.optim..... classes
-    def set_optimizer(self, *args, **kwargs):
-        return
+    def set_scheduler(self):
+        pass
 
-    # Modify this to select from torch.optim.lr_scheduler.... classes
-    def set_scheduler(self, *args, **kwargs):
-        return
-
-    # Modify this to choose a metric function to use in training -- Will accept target and pred
-    def monitor_metric(self, *args, **kwargs):
-
-        # self.metric_name = ...
-        return
+    def set_extra_config(self, config):
+        pass # Set extra configs here such as self.threshold = config["threshold"]
 
     # Helper function to set model attributes when .fit() is called
-    def _set_model_attributes(self, train_dataset, valid_dataset, device, n_epochs, train_batch_size, valid_batch_size):
+    def _set_model_attributes(self, train_dataset, valid_dataset, config):
 
-        # Set number of epochs
-        self.n_epochs = n_epochs
+        # Can pass directly in more parameters  using config
+        # Setting configurations
+        for attr in config.keys():
+            self.__setattr__(attr, config[attr])
 
         # Move model to "device"
         if next(self.parameters()).device != device:
@@ -64,62 +70,44 @@ class Base_model(nn.Module):
         if self.train_loader is None:
             self.train_loader = torch.utils.data.DataLoader(
                 train_dataset,
-                batch_size=train_batch_size,
+                batch_size=self.train_batch_size,
                 shuffle=True
             )
-            # Set number of training batches
-            self.train_n_batches = len(self.train_loader)
 
         # Create valid_loader from valid_dataset
         if self.valid_loader is None:
             if valid_dataset is not None:
                 self.valid_loader = torch.utils.data.DataLoader(
                     valid_dataset,
-                    batch_size=valid_batch_size,
+                    batch_size=self.valid_batch_size,
                     shuffle=False
                 )
-                # Set number of validation batches
-                self.valid_n_batches = len(self.valid_loader)
 
         # Initiate Optimizer
         if self.optimizer is None:
-            self.optimizer = self.set_optimizer()
+            self.set_optimizer(self.LR)
 
         # Set Learning Rate Scheduler
         if self.scheduler is None:
-            self.scheduler = self.set_scheduler()  # Requires optimizer already created
+            self.set_scheduler()  # Requires optimizer already created
+
 
     # Main method for trianing all epochs
-    def fit(self,
-            train_dataset,
-            valid_dataset=None,
-            device="cuda",
-            n_epochs=10,
-            train_batch_size=16,
-            valid_batch_size=16
-            ):
+    def fit(self,train_dataset, valid_dataset=None, config=None ):
 
         # Set model attributes
-        self._set_model_attributes(
-            train_dataset=train_dataset,
-            valid_dataset=valid_dataset,
-            device=device,
-            n_epochs=n_epochs,
-            train_batch_size=train_batch_size,
-            valid_batch_size=valid_batch_size
-        )
+        self._set_model_attributes(train_dataset=train_dataset, valid_dataset=valid_dataset, config=config)
 
-        # Initialise trackers for training and validation tracking
-        trackers = {"loss": Tracker(), self.metric_name: Tracker()}
-
+        wandb.watch(self, self.optimizer, log="all", log_freq=10)
         # For every epoch ...
-        for _ in range(n_epochs):
+        for _ in range(self.n_epochs):
             # ... train the model
-            trackers = self.train_one_epoch(device, trackers)  # Removed self.train_loader
+            self.train_one_epoch()  # Removed self.train_loader
 
             # ... Calculate loss and metric on validation
             if self.valid_loader:
-                trackers = self.validate_all(device, trackers)  # Removed self.valid_loader
+                if (self.current_epoch+1) % self.validate_every_n_epoch ==0 :
+                    self.validate_all(valid_dataset) #  MODIFIED FOR SHOPEE ONLY -- REMOVE ARGUMENT HERE
 
             # ... Move scheduler if applicable
             if self.scheduler:
@@ -129,53 +117,48 @@ class Base_model(nn.Module):
             self.current_epoch += 1
 
     # Method for training one single epoch
-    def train_one_epoch(self, device, trackers):
-        # Set model to trianing mode
-        global metric
+    def train_one_epoch(self):
+
         self.train()
-        # Define number of batches
-        n_batches = len(self.train_loader)
+
         # Initiate tqdm object
-        tk0 = tqdm(self.train_loader, total=n_batches)
+        tk0 = tqdm(self.train_loader, total= len(self.train_loader))
 
         # Variables for storing total epoch errors
-        total_loss = 0
-        total_metric = 0
+        loss_meter = AvgMeter(name="train_loss")
+        metric_meter = AvgMeter(name="train_metric")
 
         # For each batch ...
-        for batch_no, training_batch in enumerate(tk0):
+        for batch_no, train_batch in enumerate(tk0):
             # ... Train model
-            loss, metric = self.train_one_batch(training_batch, device)
+            out, loss, metric  = self.train_one_batch(train_batch)
 
-            # ... Cumulative sum up errors
-            total_loss += loss.item()
-            total_metric += metric
+            loss_meter.update(loss.item()) ; metric_meter.update(metric)
 
             # ... Make tqdm print stats
-            tk0.set_postfix(Stage="train", Batch_No=batch_no, Batch_Loss=loss, Batch_Metric=metric)
+            tk0.set_postfix(Stage="train", Epoch_No=self.current_epoch, Batch_No=batch_no, Loss=loss.item(), Metric=metric)
+            # ... Log to WANDB
+            wandb.log({"epoch": self.current_epoch, "loss": loss.item(), "train_metric":metric} ,step=self.current_train_step)
+
+            self.current_train_step +=1
 
         tk0.close()
 
-        # Save loss and metric value for train
-        trackers["loss"].add_to_train_meter(total_loss / n_batches)
-        trackers[self.metric_name].add_to_train_meter(total_metric / n_batches)
+        logging.info(loss_meter); logging.info(metric_meter)
+        # Log epoch averages to wandb
+        wandb.log({"epoch": self.current_epoch, "train_epoch_loss": loss_meter.avg,  "train_epoch_metric": metric_meter.avg}, step= self.current_train_step)
 
-        return trackers
 
-    def train_one_batch(self, training_batch, device):
 
+    def train_one_batch(self, train_batch):
         # Refresh gradients of the optimizer
         self.optimizer.zero_grad()
 
-        # Move data to "device"
-        for key, value in training_batch.items():
-            training_batch[key] = value.to(device)
+        for key, value in train_batch.items():
+            train_batch[key] = value.to(self.device)
 
         # Forwardpass
-        predictions = self(**training_batch)
-
-        # Calculate loss keeping gradients--- Designed for reduced loss of the batch
-        loss = self.loss(predictions, **training_batch[1])  # Check this might not be correct
+        out, loss, metric = self(train_batch)
 
         # Calculate gradients
         loss.backward()
@@ -186,67 +169,59 @@ class Base_model(nn.Module):
         if self.scheduler:
             self.scheduler.step()
 
-        # Calculate training metric for the current batch
-        metric = create_metric(predictions, **training_batch[1])
+        return out, loss, metric
 
-        return loss, metric
 
-    def validate_all(self, device):
+    def validate_all(self):
         # Set model to evalutation mode
         self.eval()
-        # Define number of batches
-        n_batches = len(self.valid_loader)
+
         # Initiate tqdm object
-        tk0 = tqdm(self.valid_loader, total=n_batches)
+        tk0 = tqdm(self.valid_loader, total=len(self.valid_loader))
 
         # Variables for storing total epoch errors
-        total_loss = 0
-        total_metric = 0
+        loss_meter = AvgMeter(name="Valid_loss")
+        metric_meter = AvgMeter(name="Valid_metric")
 
         # For each batch ...
-        for batch_no, valid_batch in enumerate(tk0):
-            # ... Calculate metrics on validation set without training
-            loss, metric = self.validate_one_batch(valid_batch, device)
+        for batch_no, (valid_batch) in enumerate(tk0):
 
-            # ... Cumulative sum up errors
-            total_loss += loss.item()
-            total_metric += metric
+            out, loss, metric = self.validate_one_batch(valid_batch)
+
+            loss_meter.update(loss.item()); metric_meter.update(metric)
 
             # ... Make tqdm print stats
-            tk0.set_postfix(Stage="Validation", Batch_No=batch_no, Batch_Loss=loss, Batch_Metric=metric)
+            tk0.set_postfix(Stage="Validation", Epoch_No=self.current_epoch, Batch_No=batch_no, Loss=loss.item(), Metric=metric)
+            # ... Log to WANDB
 
         tk0.close()
-        # Save loss and metric value for train
-        trackers["loss"].add_to_val_meter(total_loss / n_batches)
-        trackers[self.metric_name].add_to_val_meter(metric / n_batches)
 
-        return trackers
+        logging.info(loss_meter); logging.info(metric_meter)
+        # Log epoch averages to wandb
+        wandb.log({"valid_loss": loss_meter.avg, "valid_metric": metric_meter.avg}, step=self.current_train_step)
 
-    def validate_one_batch(self, valid_batch, device):
-        # Move validation batch to "device"
+
+    def validate_one_batch(self, valid_batch):
+
+        # Move batch to device
         for key, value in valid_batch.items():
-            valid_batch[key] = value.to(device)
+            valid_batch[key] = value.to(self.device)
 
         with torch.no_grad():
             # Forwardpass
-            predictions = self(**valid_batch)
+            out, loss, metric = self(valid_batch)
 
-            # Designed for reduced loss of the batch
-            loss = loss_func(predictions, **valid_batch[1])  # Check this might not be correct
-            metric = create_metric(predictions, **valid_batch[1])
-
-        return loss, metrics
+        return out, loss, metrics
 
     # Method for unlabeled data prediction
-    def predict(self, test_dataset, device, batch_size=16):
+    def predict(self, test_dataset, batch_size=16):
 
         # Check if the mode is at "device"
-        if next(self.parameters()).device != device:
-            self.to(device)
+        if next(self.parameters()).device != self.device:
+            self.to(self.device)
 
         # Create data loader
-        test_loader = torch.utils.data.DataLoader(
-            test_dataset, batch_size=batch_size, shuffle=False)
+        test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 
         # Set evaluation mode
         self.eval()
@@ -258,9 +233,9 @@ class Base_model(nn.Module):
         tk0 = tqdm(test_loader, total=len(test_loader))
 
         # For every test batch ...
-        for batch_no, test_batch in enumerate(tk0):
+        for batch_no, test_batch in enumerate(tk0): # Test dataset doesn't return empty labels
             # Make predictions
-            out = self.predict_one_batch(test_batch, device)
+            out = self.predict_one_batch(test_batch)
 
             # Move predictions to "cpu" device
             preds.append(out.cpu().detach().numpy())
@@ -270,19 +245,20 @@ class Base_model(nn.Module):
 
         tk0.close()
 
-        return preds
+        return np.concatenate(preds, axis=0)
 
-    def predict_one_batch(self, test_batch, device):
+    def predict_one_batch(self, test_batch):
+
+        # Move batch to device
         for key, value in test_batch.items():
-            test_batch[key] = value.to(device)
+            test_batch[key] = value.to(self.device)
 
         with torch.no_grad():
-            out = self(**test_batch)
+            out, _, _ = self(test_batch)
 
         return out
 
-    def save(self, model_path):
-        model_state_dict = self.state_dict()
+    def snapshot(self, model_path, config):
 
         if self.optimizer is not None:
             opt_state_dict = self.optimizer.state_dict()
@@ -295,42 +271,37 @@ class Base_model(nn.Module):
             sch_state_dict = None
 
         model_dict = {}
-        model_dict["state_dict"] = model_state_dict
-        model_dict["optimizer"] = opt_state_dict
-        model_dict["scheduler"] = sch_state_dict
-        model_dict["epoch"] = self.current_epoch
+        model_dict["model_state_dict"] = self.state_dict()
+        model_dict["optimizer_state_dict"] = opt_state_dict
+        model_dict["scheduler_state_dict"] = sch_state_dict
+        model_dict["config"] = config
 
         torch.save(model_dict, model_path)
 
-    def load(self, model_path, device="cuda"):
 
-        if next(self.parameters()).device != device:
-            self.to(device)
+def load_snapshot(self, model_path,  model_obj, device, optimizer_obj=None, scheduler_obj=None):
 
-        model_dict = torch.load(model_path)
+    checkpoint = torch.load(model_path) # Might need to add , map_location="cpu" or "gpu" depending where it is saved from
 
-        self.load_state_dict(model_dict["state_dict"])
+    model_obj.load_state_dict(checkpoint['model_state_dict'])
 
-        # Might need to load optimizer and scheduler ??
+    if optimizer_obj:
+        optimizer_obj.load_state_dict(checkpoint['optimizer_state_dict'])
+        model_obj.optimizer = optimizer_obj
+
+    if scheduler_obj:
+        scheduler_obj.load_state_dict(checkpoint['scheduler_state_dict'])
+        model_obj.scheduler = scheduler_obj
+
+    config = checkpoint['config']
+    for attr in config.keys():
+        model_obj.__setattr__(attr, config[attr])
+
+    model_obj.to(device)
+
+    return model_obj
 
 
-# Tracker for epoch based metric values
-class Tracker():
-    def __init__(self):
-        self.train_epoch_meter = np.zeros(shape=(0, 0))
-        self.val_epoch_meter = np.zeros(shape=(0, 0))
-        self.test_epoch_meter = np.zeros(shape=(0, 0))
-
-    def add_to_train_meter(self, value):
-        self.train_epoch_meter = np.append(self.train_epoch_meter, value)
-
-    def add_to_val_meter(self, value):
-        self.val_epoch_meter = np.append(self.val_epoch_meter, value)
-
-    def add_to_test_meter(self, value):
-        self.test_epoch_meter = np.append(self.test_epoch_meter, value)
-
-# MIGHT CHANGE TRACKER WITH THIS
 class AvgMeter:
     def __init__(self, name="Metric"):
         self.name = name
@@ -351,5 +322,19 @@ class AvgMeter:
 
 
 
-
-
+#
+# # Tracker for epoch based metric values
+# class Tracker():
+#     def __init__(self):
+#         self.train_epoch_meter = np.zeros(shape=(0, 0))
+#         self.val_epoch_meter = np.zeros(shape=(0, 0))
+#         self.test_epoch_meter = np.zeros(shape=(0, 0))
+#
+#     def add_to_train_meter(self, value):
+#         self.train_epoch_meter = np.append(self.train_epoch_meter, value)
+#
+#     def add_to_val_meter(self, value):
+#         self.val_epoch_meter = np.append(self.val_epoch_meter, value)
+#
+#     def add_to_test_meter(self, value):
+#         self.test_epoch_meter = np.append(self.test_epoch_meter, value)
