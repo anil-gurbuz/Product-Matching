@@ -7,7 +7,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 pre_trained_image_model_folder = "data/image_model/"
 
 class image_embedder(Base_model):
-    def __init__(self, tfidf_dim=15000, img_emb=256, text_emb=256, out_classes=11014):
+    def __init__(self, tfidf_dim=TEXT_VEC_SIZE, img_emb=256, text_emb=256, out_classes=11014):
         super().__init__()
 
         try:
@@ -39,10 +39,10 @@ class image_embedder(Base_model):
 
         full_emb = torch.cat([img_emb,text_emb], dim=1)
 
-        if label is not None:
+        if self.training:
             out = self.arcface_head(full_emb, label)
             loss = self.loss(out, label)
-            metric = self.metric(out, label)
+            metric = 0
 
             return out, loss, metric
         else:
@@ -54,7 +54,7 @@ class image_embedder(Base_model):
 
     def validate_all(self, valid_dataset):
        embeddings = self.predict(valid_dataset, batch_size=self.valid_batch_size)
-       matches = cosine_find_matches_cupy(embeddings, valid_dataset.df.posting_ids, self.threshold, create_submission=False)
+       matches = cosine_find_matches_cupy(embeddings, valid_dataset.df.posting_id, self.threshold, create_submission=False)
        f1_score = matches_to_f1_score(valid_dataset.df.target, pd.Series(matches))
        wandb.log({"Valid_F1":f1_score}, step=self.current_train_step)
 

@@ -43,7 +43,7 @@ def create_train_test(mode=None, give_fold=None):
     train["target"] = create_submission_format(train)
     n_labels = train.label_group.nunique()
 
-    if mode == "tiny_data":
+    if mode == "debug":
         train_labels = train.label_group.unique()[np.random.randint(0, n_labels, 100)]
         valid_labels = train.label_group.unique()[np.random.randint(0, n_labels, 200)]
         valid_labels = [label for label in valid_labels if label not in train_labels]
@@ -83,7 +83,7 @@ def create_train_test(mode=None, give_fold=None):
         return train_ds, valid_ds
 
 
-    if mode == "full_train":
+    if mode == "train":
         enc = LabelEncoder()
         train.label_group = enc.fit_transform(train.label_group)
         train_ds = ShopeeDataset(train, "train", transforms=get_transforms())
