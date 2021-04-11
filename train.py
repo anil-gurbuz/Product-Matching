@@ -2,8 +2,8 @@ from Utils import *
 from Model import image_embedder
 from clustering import *
 
-mode = "full_train" # OR "baby_sit"
-tfidf_dim=15000
+mode = "debug" #  "train" or "debug"
+tfidf_dim=TEXT_VEC_SIZE
 img_emb=256
 text_emb=256
 out_classes=11014
@@ -21,7 +21,7 @@ now = datetime.datetime.now()
 run_name = mode + "@" + now.strftime("%A - %H:%I")
 model_save_path = f"data/tfidf_{tfidf_dim}_{img_emb}_{text_emb}_{out_classes}.pth"
 
-if mode == "baby_sit":
+if mode == "debug":
     config["validate_every_n_epoch"], config["n_epochs"] = 2, 2
 wandb.login()
 set_all_seeds()

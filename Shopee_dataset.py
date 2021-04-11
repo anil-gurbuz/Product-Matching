@@ -11,7 +11,7 @@ def get_transforms(img_size=256):
 def get_text_embeddings(titles, max_features = TEXT_VEC_SIZE):
 
     vectorizer = TfidfVectorizer(stop_words = 'english', binary = True, max_features = max_features)
-    vectorizer = vectorizer.fit(pd.read_csv(data_folder + "/train.csv"))
+    vectorizer = vectorizer.fit(pd.read_csv(data_folder + "/train.csv").title)
     text_embeddings = vectorizer.transform(titles)
     del vectorizer
     return text_embeddings

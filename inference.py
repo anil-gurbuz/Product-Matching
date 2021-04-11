@@ -4,7 +4,7 @@ from clustering import *
 
 img_embed_size = 512
 text_embed_size = 512
-TEXT_VEC_SIZE = 15000
+#TEXT_VEC_SIZE = TEXT_VEC_SIZE
 threshold = 0.3
 model_path = "data/Embedder_full_train_tfidf.pth"
 
