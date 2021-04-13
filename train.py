@@ -1,7 +1,7 @@
 from Utils import *
 from Model import image_embedder
 from clustering import *
-
+# JUST TO TRY MAKING CHANGE #
 
 mode = "train" #  "train" or "debug"
 tfidf_dim=TEXT_VEC_SIZE
