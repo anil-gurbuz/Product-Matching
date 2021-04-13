@@ -233,7 +233,7 @@ class Base_model(nn.Module):
         tk0 = tqdm(test_loader, total=len(test_loader))
 
         # For every test batch ...
-        for batch_no, test_batch in enumerate(tk0): # Test dataset doesn't return empty labels
+        for batch_no, (test_batch) in enumerate(tk0): # Test dataset doesn't return empty labels
             # Make predictions
             out = self.predict_one_batch(test_batch)
 
@@ -279,9 +279,9 @@ class Base_model(nn.Module):
         torch.save(model_dict, model_path)
 
 
-def load_snapshot(self, model_path,  model_obj, device, optimizer_obj=None, scheduler_obj=None):
+def load_snapshot(model_path,  model_obj, device, optimizer_obj=None, scheduler_obj=None):
 
-    checkpoint = torch.load(model_path) # Might need to add , map_location="cpu" or "gpu" depending where it is saved from
+    checkpoint = torch.load(model_path, map_location=device) # Might need to add , map_location="cpu" or "gpu" depending where it is saved from
 
     model_obj.load_state_dict(checkpoint['model_state_dict'])
 

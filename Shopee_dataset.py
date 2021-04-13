@@ -30,8 +30,8 @@ class ShopeeDataset(Dataset):
         row = self.df.iloc[index,]
         try:
             label_group = torch.tensor(row.label_group)
-        except ValueError:
-            label_group = None
+        except (ValueError, AttributeError):
+            label_group = torch.Tensor()
 
         text_vec = self.text_vec[index,]
         text_vec = torch.tensor(np.squeeze(text_vec.toarray().astype(np.float32)))

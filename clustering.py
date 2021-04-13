@@ -3,14 +3,14 @@ from lib import *
 from Utils import matches_to_f1_score
 
 
-def get_best_threshold(method, embeddings, posting_ids, label_groups, candidates):
+def get_best_threshold(method, embeddings, posting_ids, correct_matches, candidates):
 
     scores = dict()
     for threshold in candidates:
 
         matches = method(embeddings, posting_ids, threshold, create_submission=False)
 
-        scores[threshold] = matches_to_f1_score(pd.Series(matches), pd.Series(label_groups))
+        scores[threshold] = matches_to_f1_score(pd.Series(matches), pd.Series(correct_matches))
 
         logging.info(f"Method:{method.__name__},   Threshold:{threshold},   F1-Score: {scores[threshold]}")
 
@@ -110,12 +110,12 @@ def cosine_find_matches_cuml(embeddings, posting_ids, threshold, create_submissi
 
 def euclidian_find_matches_cupy(embeddings, posting_ids, threshold, create_submission=True):
     embeddings = cp.array(embeddings)
-    N = embeddings.shape[1]
+    N = embeddings.shape[0]
     matches = []
 
     for i in tqdm(range(N)):
-        v = embeddings[:, i].reshape(-1, 1)
-        thresholded_bool = cp.linalg.norm(v - embeddings, axis=0) < threshold
+        v = embeddings[i, :]
+        thresholded_bool = cp.linalg.norm(embeddings-v, axis=1) < threshold
         thresholded_ix = cp.argwhere(thresholded_bool).squeeze(-1)
         thresholded_ix = thresholded_ix.get()
         match = " ".join(posting_ids[thresholded_ix])

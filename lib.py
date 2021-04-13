@@ -30,6 +30,8 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from transformers import BertTokenizer, BertModel
 
 device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+
+now = datetime.datetime.now()
 IMAGE_SIZE = (384, 384)
 TEXT_VEC_SIZE = 15000
 data_folder = "data"

@@ -1,7 +1,7 @@
 from lib import *
 from ArcFace import ArcFace
 from Base_Trainer import Base_model
-from clustering import cosine_find_matches_cupy, matches_to_f1_score
+from clustering import cosine_find_matches_cupy, euclidian_find_matches_cupy, get_best_threshold, matches_to_f1_score
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 pre_trained_image_model_folder = "data/image_model/"
@@ -54,9 +54,10 @@ class image_embedder(Base_model):
 
     def validate_all(self, valid_dataset):
        embeddings = self.predict(valid_dataset, batch_size=self.valid_batch_size)
-       matches = cosine_find_matches_cupy(embeddings, valid_dataset.df.posting_id, self.threshold, create_submission=False)
+
+       # Find best threshold for cosine distance and log the f1
+       best_cosine_threshold = get_best_threshold(cosine_find_matches_cupy, embeddings, valid_dataset.df.posting_id, valid_dataset.df.target, np.arange(0.05,0.5,0.05))
+       matches = cosine_find_matches_cupy(embeddings, valid_dataset.df.posting_id, best_cosine_threshold,create_submission=False)
        f1_score = matches_to_f1_score(valid_dataset.df.target, pd.Series(matches))
-       wandb.log({"Valid_F1":f1_score}, step=self.current_train_step)
-
-
+       wandb.log({"Valid_cosine_F1": f1_score}, step=self.current_train_step)
 
