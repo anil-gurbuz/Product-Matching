@@ -11,6 +11,13 @@ def set_all_seeds(seed=0):
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False  # set True to be faster -- Check what is this
 
+# Function to get our text title embeddings
+def get_text_embeddings(df,  max_features = TEXT_VEC_SIZE):
+
+    vectorizer = TfidfVectorizer(stop_words = 'english', binary = True, max_features = max_features)
+    text_embeddings = vectorizer.fit_transform(df.title)
+    del vectorizer
+    return text_embeddings
 
 def create_submission_format(df):
     tmp = df.groupby("label_group").posting_id.unique().to_dict()
@@ -61,7 +68,7 @@ def create_train_test(mode=None, give_fold=None):
         return train_ds, valid_ds
 
     if mode == "validation":
-        cv_splitter = GroupKFold(n_splits=3)
+        cv_splitter = GroupKFold(n_splits=2)
         train["fold"] = -1
 
         # Assign folds for validation
