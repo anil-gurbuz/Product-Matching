@@ -19,6 +19,7 @@ class Base_model(nn.Module):
         self.valid_batch_size = None
         self.n_epochs = None
         self.validate_every_n_epoch = None
+        self.save_every_n_epoch = None
         self.device = None
         self.LR = None
 
@@ -93,7 +94,7 @@ class Base_model(nn.Module):
 
 
     # Main method for trianing all epochs
-    def fit(self,train_dataset, valid_dataset=None, config=None ):
+    def fit(self,train_dataset, valid_dataset=None, config=None, model_path="model" ):
 
         # Set model attributes
         self._set_model_attributes(train_dataset=train_dataset, valid_dataset=valid_dataset, config=config)
@@ -112,6 +113,12 @@ class Base_model(nn.Module):
             # ... Move scheduler if applicable
             if self.scheduler:
                 self.scheduler.step()
+
+            if (self.current_epoch+1) % self.save_every_n_epoch == 0:
+                self.snapshot( model_path + str(self.current_epoch+1) + ".pth", config)
+
+
+
 
             # Keep record of epoch_no
             self.current_epoch += 1

@@ -95,7 +95,17 @@ def create_train_test(mode=None, give_fold=None):
         train.label_group = enc.fit_transform(train.label_group)
         train_ds = ShopeeDataset(train, "train", transforms=get_transforms())
 
-        return train_ds, None
+
+        cv_splitter = GroupKFold(n_splits=7)
+        train["fold"] = -1
+        # Assign folds for validation
+        for fold, (train_idx, valid_idx) in enumerate(cv_splitter.split(train, None, train.label_group)):
+            train.loc[valid_idx, "fold"] = fold
+
+        fold_valid = train.loc[train.fold == 1,]
+        valid_ds = ShopeeDataset(fold_valid, "test", transforms=get_transforms())
+
+        return train_ds, valid_ds
 
     if mode == "inference":
         test = pd.read_csv(data_folder + "/test.csv")

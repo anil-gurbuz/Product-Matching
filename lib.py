@@ -26,7 +26,6 @@ import cupy as cp
 
 from efficientnet_pytorch import EfficientNet
 
-from pytorch_memlab import profile, set_target_gpu
 
 
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -35,6 +34,6 @@ from transformers import BertTokenizer, BertModel
 device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
 now = datetime.datetime.now()
-IMAGE_SIZE = 256
+IMAGE_SIZE = 512
 TEXT_VEC_SIZE = 15000
 data_folder = "data"

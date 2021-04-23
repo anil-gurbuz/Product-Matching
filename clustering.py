@@ -12,10 +12,10 @@ def get_best_threshold(method, embeddings, posting_ids, correct_matches, candida
 
         scores[threshold] = matches_to_f1_score(pd.Series(matches), pd.Series(correct_matches))
 
-        logging.info(f"Method:{method.__name__},   Threshold:{round(threshold,2)},   F1-Score: {round(scores[threshold],2)}")
+        logging.info(f"Method:{method.__name__},   Threshold:{round(threshold,3)},   F1-Score: {round(scores[threshold],3)}")
 
     best_threshold = max(scores, key=scores.get)
-    logging.info(f"Best Threshold:{round(best_threshold,2)},  Best F1-Score: {round(scores[best_threshold],2)}")
+    logging.info(f"Best Threshold:{round(best_threshold,3)},  Best F1-Score: {round(scores[best_threshold],3)}")
 
     return best_threshold
 

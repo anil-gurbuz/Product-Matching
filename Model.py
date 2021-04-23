@@ -47,6 +47,9 @@ class image_embedder(Base_model):
     def set_optimizer(self, lr):
         self.optimizer = torch.optim.Adam(self.parameters(), lr=lr)
 
+    def set_scheduler(self):
+        self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, step_size=1, gamma=0.5)
+
 
     def validate_all(self, valid_dataset):
        embeddings = self.predict(valid_dataset, batch_size=self.valid_batch_size)

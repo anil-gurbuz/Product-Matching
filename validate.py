@@ -4,15 +4,15 @@ from clustering import *
 
 
 tfidf_dim=TEXT_VEC_SIZE
-img_emb=1024
+img_emb=2048
 text_emb=0
 out_classes=11014
 config = {"n_epochs": 2,
           "validate_every_n_epoch": 1,
           "LR": 1e-4,
           "threshold": 0.3,
-          "train_batch_size": 12,
-          "valid_batch_size": 12,
+          "train_batch_size": 6,
+          "valid_batch_size": 6,
           "device": device,
           }
 #data_folder
