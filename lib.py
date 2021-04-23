@@ -35,5 +35,5 @@ device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cp
 
 now = datetime.datetime.now()
 IMAGE_SIZE = 512
-TEXT_VEC_SIZE = 15000
 data_folder = "data"
+TEXT_VEC_SIZE=15000

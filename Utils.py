@@ -115,3 +115,11 @@ def create_train_test(mode=None, give_fold=None):
 
         return test_ds, None
 
+
+    if mode=="overfit":
+        enc = LabelEncoder()
+        train.label_group = enc.fit_transform(train.label_group)
+        train = train.loc[train.label_group.isin(train.label_group.unique()[0:5]),]
+        train_ds = ShopeeDataset(train, "train", transforms=get_transforms())
+        return train_ds, None
+

@@ -9,7 +9,7 @@ model_file_name = "efficientnet-b0-355c32eb.pth"
 model_name = "efficientnet-b0"
 
 class image_embedder(Base_model):
-    def __init__(self, img_emb=2000, out_classes=11014):
+    def __init__(self, img_emb=2000, out_classes=11014, dropout=0.3):
         super().__init__()
 
         try:
@@ -18,8 +18,8 @@ class image_embedder(Base_model):
         except:
             self.effnet = EfficientNet.from_pretrained(pre_trained_image_model_folder + model_file_name)
 
-        self.linear = nn.Linear(1000, img_emb)
-        self.arcface_head = ArcFace(img_emb, out_classes)
+
+        self.arcface_head = ArcFace(1000, out_classes)
 
         self.loss = nn.CrossEntropyLoss()
         self.metric = metrics.accuracy_score
@@ -32,8 +32,7 @@ class image_embedder(Base_model):
         images = data_batch["image"]
         label = data_batch["label"]
 
-        img_emb = self.linear(self.effnet(images))
-
+        img_emb = self.effnet(images)
 
         if self.training:
             out = self.arcface_head(img_emb, label)
@@ -45,10 +44,10 @@ class image_embedder(Base_model):
             return img_emb, 0, 0
 
     def set_optimizer(self, lr):
-        self.optimizer = torch.optim.Adam(self.parameters(), lr=lr)
+        self.optimizer = optim.Adam(self.parameters(), lr=lr)
 
-    def set_scheduler(self):
-        self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, step_size=1, gamma=0.5)
+ #   def set_scheduler(self):
+ #       self.scheduler = optim.lr_scheduler.StepLR(self.optimizer, step_size=1, gamma=0.5)
 
 
     def validate_all(self, valid_dataset):
