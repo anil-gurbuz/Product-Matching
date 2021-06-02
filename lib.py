@@ -8,6 +8,7 @@ import pickle
 import wandb
 import datetime
 
+from tqdm import tqdm
 
 
 
